@@ -1,0 +1,87 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --bg: 28 24% 96%;
+  --surface: 0 0% 100%;
+  --surface-alt: 24 20% 94%;
+  --border: 220 16% 86%;
+  --text: 222 24% 16%;
+  --muted: 222 10% 42%;
+  --brand-50: 22 80% 96%;
+  --brand-100: 22 78% 90%;
+  --brand-200: 22 75% 82%;
+  --brand-300: 22 72% 70%;
+  --brand-400: 22 74% 58%;
+  --brand-500: 22 78% 48%;
+  --brand-600: 22 76% 40%;
+  --brand-700: 22 74% 32%;
+  --brand-800: 22 70% 24%;
+  --danger-50: 0 85% 96%;
+  --danger-500: 0 72% 52%;
+  --danger-700: 0 68% 40%;
+  --success-50: 150 50% 96%;
+  --success-500: 150 54% 40%;
+  --success-700: 150 62% 30%;
+  --warning-50: 40 90% 95%;
+  --warning-500: 40 90% 55%;
+  --warning-700: 34 80% 40%;
+}
+
+.dark {
+  color-scheme: dark;
+  --bg: 230 24% 10%;
+  --surface: 230 22% 14%;
+  --surface-alt: 230 20% 18%;
+  --border: 230 18% 24%;
+  --text: 0 0% 98%;
+  --muted: 230 14% 70%;
+  --brand-50: 22 40% 20%;
+  --brand-100: 22 44% 24%;
+  --brand-200: 22 50% 30%;
+  --brand-300: 22 58% 40%;
+  --brand-400: 22 68% 50%;
+  --brand-500: 22 78% 58%;
+  --brand-600: 22 84% 64%;
+  --brand-700: 22 90% 72%;
+  --brand-800: 22 95% 80%;
+  --danger-50: 0 42% 20%;
+  --danger-500: 0 70% 60%;
+  --danger-700: 0 80% 70%;
+  --success-50: 150 26% 20%;
+  --success-500: 150 50% 52%;
+  --success-700: 150 62% 62%;
+  --warning-50: 40 28% 18%;
+  --warning-500: 40 75% 55%;
+  --warning-700: 40 85% 66%;
+}
+
+* {
+  @apply border-border;
+}
+
+body {
+  @apply bg-bg text-text font-sans antialiased;
+}
+
+h1, h2, h3 {
+  @apply font-display text-text;
+}
+
+a {
+  @apply text-brand-600 hover:text-brand-700;
+}
+
+input, textarea, select {
+  @apply text-text;
+}
+
+.main-gradient {
+  background: radial-gradient(circle at top, hsl(var(--brand-100)), transparent 45%),
+    radial-gradient(circle at 20% 20%, hsl(var(--brand-50)), transparent 40%),
+    radial-gradient(circle at 80% 0%, hsl(var(--brand-200)), transparent 35%);
+}
