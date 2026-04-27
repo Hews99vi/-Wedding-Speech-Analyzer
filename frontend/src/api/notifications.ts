@@ -1,65 +1,27 @@
-import type { NotificationItem, NotificationType } from '../types/notification'
+import api from './client'
+import type { NotificationOut } from '../types/notification'
 
-const now = new Date()
-
-const buildNotification = (
-  id: string,
-  type: NotificationType,
-  title: string,
-  message: string,
-  offsetMinutes: number,
-  read = false
-): NotificationItem => ({
-  id,
-  type,
-  title,
-  message,
-  createdAt: new Date(now.getTime() - offsetMinutes * 60000).toISOString(),
-  read
+const withCreatedAtAlias = (item: NotificationOut): NotificationOut => ({
+  ...item,
+  createdAt: item.created_at
 })
 
-let notifications: NotificationItem[] = [
-  buildNotification(
-    'notif-1',
-    'ProcessingComplete',
-    'Job complete',
-    'Lydia & James highlights are ready to review.',
-    12
-  ),
-  buildNotification(
-    'notif-2',
-    'KeyMomentsDetected',
-    'Key moments detected',
-    '8 key moments tagged for Siena Garden Ceremony.',
-    45
-  ),
-  buildNotification(
-    'notif-3',
-    'AudioQualityIssue',
-    'Audio quality issue',
-    'Riverview Reception has low signal in segment 02.',
-    90,
-    true
-  )
-]
-
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
-export const fetchNotifications = async () => {
-  await delay(400)
-  return [...notifications].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+export async function fetchNotifications(): Promise<NotificationOut[]> {
+  const response = await api.get<NotificationOut[]>('/notifications')
+  return response.data.map(withCreatedAtAlias)
 }
 
-export const markNotificationRead = async (id: string) => {
-  await delay(200)
-  notifications = notifications.map((item) =>
-    item.id === id ? { ...item, read: true } : item
-  )
-  return notifications
+export async function markNotificationRead(id: string): Promise<NotificationOut> {
+  const response = await api.patch<NotificationOut>(`/notifications/${id}`)
+  return withCreatedAtAlias(response.data)
 }
 
-export const clearAllNotifications = async () => {
-  await delay(200)
-  notifications = []
-  return notifications
+export async function markAllNotificationsRead(): Promise<{ message: string }> {
+  const response = await api.patch<{ message: string }>('/notifications/read-all')
+  return response.data
+}
+
+export async function clearAllNotifications(): Promise<{ message: string }> {
+  const response = await api.delete<{ message: string }>('/notifications')
+  return response.data
 }

@@ -1,52 +1,24 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
+import axios from 'axios'
 import { Input } from '../../components/ui/Input'
 import { Button } from '../../components/ui/Button'
 import { useAuthStore } from '../../store/authStore'
-import type { Role } from '../../types/auth'
+import { loginUser } from '../../api/auth'
 import { getRoleRedirect, routePaths } from '../../routes/routePaths'
 
 const schema = z.object({
   email: z.string().email(),
-  password: z.string().min(6),
-  role: z.enum(['videographer', 'editor', 'admin'])
+  password: z.string().min(6)
 })
 
 type FormValues = z.infer<typeof schema>
 
-type DevAccount = {
-  label: string
-  role: Role
-  email: string
-  password: string
-}
-
 type AuthStatus = 'idle' | 'loading' | 'invalid' | 'locked'
-
-const devAccounts: DevAccount[] = [
-  {
-    label: 'Admin',
-    role: 'admin',
-    email: 'admin@weddingspeech.ai',
-    password: 'Admin123!'
-  },
-  {
-    label: 'Editor',
-    role: 'editor',
-    email: 'editor@weddingspeech.ai',
-    password: 'Editor123!'
-  },
-  {
-    label: 'Videographer',
-    role: 'videographer',
-    email: 'video@weddingspeech.ai',
-    password: 'Video123!'
-  }
-]
 
 export const Login = () => {
   const navigate = useNavigate()
@@ -57,13 +29,11 @@ export const Login = () => {
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting },
-    setValue
+    formState: { errors, isSubmitting }
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      email: 'demo@weddingspeech.ai',
-      role: 'videographer'
+      email: ''
     }
   })
 
@@ -80,68 +50,44 @@ export const Login = () => {
     }
   }, [])
 
-  const roles = useMemo(
-    () => [
-      { value: 'videographer', label: 'Videographer' },
-      { value: 'editor', label: 'Editor' },
-      { value: 'admin', label: 'Admin' }
-    ],
-    []
-  )
-
-  const loginWithRole = (values: FormValues) => {
-    const userRole = values.role as Role
-    setAuth({
-      user: {
-        id: 'demo-user',
-        name: 'Amina Rivera',
-        email: values.email,
-        role: userRole
-      },
-      accessToken: 'demo-access-token'
-    })
-
-    toast.success('Welcome back!')
-    navigate(getRoleRedirect(userRole))
-  }
-
-  const simulateAuth = async (values: FormValues) => {
-    setStatus('loading')
-    await new Promise((resolve) => setTimeout(resolve, 700))
-
-    const password = values.password.toLowerCase()
-    if (password.includes('locked')) {
-      setStatus('locked')
-      return
-    }
-    if (password.includes('invalid')) {
-      setStatus('invalid')
-      return
-    }
-
-    setStatus('idle')
-    loginWithRole(values)
-  }
-
-  const onSubmit = (values: FormValues) => {
+  const onSubmit = async (values: FormValues) => {
     if (isOffline) {
       toast.error('You appear to be offline. Check your connection and try again.')
       return
     }
 
-    simulateAuth(values)
-  }
+    setStatus('loading')
 
-  const handleDevLogin = (account: DevAccount) => {
-    setValue('email', account.email)
-    setValue('password', account.password)
-    setValue('role', account.role)
-    setStatus('idle')
-    loginWithRole({
-      email: account.email,
-      password: account.password,
-      role: account.role
-    })
+    try {
+      const response = await loginUser({
+        email: values.email,
+        password: values.password
+      })
+
+      setAuth({
+        user: response.user,
+        accessToken: response.access_token,
+        refreshToken: response.refresh_token
+      })
+
+      setStatus('idle')
+      toast.success('Welcome back!')
+      navigate(getRoleRedirect(response.user.role))
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 401) {
+          setStatus('invalid')
+          return
+        }
+        if (error.response?.status === 403) {
+          setStatus('locked')
+          return
+        }
+      }
+
+      setStatus('idle')
+      toast.error('Unable to sign in. Please try again.')
+    }
   }
 
   return (
@@ -174,30 +120,6 @@ export const Login = () => {
         </div>
       )}
 
-      <div className="rounded-2xl border border-[#3a2e22] bg-[#1b160f] p-4">
-        <p className="text-xs font-semibold uppercase tracking-widest text-[#cdb89c]">
-          Developer login
-        </p>
-        <p className="mt-2 text-xs text-[#9e8a71]">
-          Quick-fill demo accounts for role-based access checks.
-        </p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-3">
-          {devAccounts.map((account) => (
-            <button
-              key={account.role}
-              type="button"
-              onClick={() => handleDevLogin(account)}
-              className="flex h-full flex-col justify-between gap-2 rounded-xl border border-[#3a2e22] bg-[#231b13] px-3 py-3 text-left text-xs font-semibold text-white transition hover:border-[#f6c67a]"
-            >
-              <span className="text-xs font-semibold text-white">{account.label}</span>
-              <span className="break-all text-[11px] font-normal text-[#cdb89c]">
-                {account.email}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-
       <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
         <Input
           label="Email"
@@ -222,19 +144,6 @@ export const Login = () => {
             Forgot password?
           </Link>
         </div>
-        <label className="flex flex-col gap-1 text-sm text-[#cdb89c]">
-          <span className="font-medium text-white">Role</span>
-          <select
-            className="w-full rounded-xl border border-[#3a2e22] bg-[#1b160f] px-3 py-2 text-sm text-white outline-none transition focus:border-[#f6c67a]"
-            {...register('role')}
-          >
-            {roles.map((role) => (
-              <option key={role.value} value={role.value}>
-                {role.label}
-              </option>
-            ))}
-          </select>
-        </label>
         <Button
           type="submit"
           disabled={isSubmitting || status === 'loading' || isOffline}
@@ -244,7 +153,7 @@ export const Login = () => {
         </Button>
       </form>
       <div className="flex items-center justify-between text-xs text-[#cdb89c]">
-        <span>Demo mode: role selection changes route access.</span>
+        <span>Need access for your team?</span>
         <Link to={routePaths.auth.register} className="font-semibold text-[#f6c67a]">
           Create account
         </Link>

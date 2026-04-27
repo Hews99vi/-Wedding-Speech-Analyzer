@@ -1,11 +1,14 @@
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
+import axios from 'axios'
 import { Input } from '../../components/ui/Input'
 import { Button } from '../../components/ui/Button'
-import { routePaths } from '../../routes/routePaths'
+import { registerUser } from '../../api/auth'
+import { getRoleRedirect, routePaths } from '../../routes/routePaths'
+import { useAuthStore } from '../../store/authStore'
 
 const schema = z.object({
   name: z.string().min(2),
@@ -17,6 +20,8 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>
 
 export const Register = () => {
+  const navigate = useNavigate()
+  const setAuth = useAuthStore((state) => state.setAuth)
   const {
     register,
     handleSubmit,
@@ -28,8 +33,27 @@ export const Register = () => {
     }
   })
 
-  const onSubmit = () => {
-    toast.success('Account created. Please sign in.')
+  const onSubmit = async (values: FormValues) => {
+    try {
+      const response = await registerUser(values)
+
+      setAuth({
+        user: response.user,
+        accessToken: response.access_token,
+        refreshToken: response.refresh_token
+      })
+
+      toast.success('Account created. Welcome!')
+      navigate(getRoleRedirect(response.user.role))
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 400) {
+        const detail = error.response.data?.detail
+        toast.error(typeof detail === 'string' ? detail : 'Unable to create account.')
+        return
+      }
+
+      toast.error('Unable to create account. Please try again.')
+    }
   }
 
   return (

@@ -6,149 +6,151 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Table } from '../../components/ui/Table'
-import type { JobLanguage } from '../../types/job'
+import { EmptyState } from '../../components/ui/EmptyState'
+import { ErrorState } from '../../components/ui/ErrorState'
+import { listJobs } from '../../api/jobs'
+import type { JobOut } from '../../types/job'
 import { routePaths } from '../../routes/routePaths'
 
-type JobStatus = 'Uploading' | 'Processing' | 'Ready' | 'Failed'
+type JobStatus = 'Queued' | 'Uploading' | 'Processing' | 'Ready' | 'Failed'
+type StatusFilter = 'All' | 'Queued' | 'Processing' | 'Ready' | 'Failed'
+type LanguageFilter = 'All' | 'English' | 'Sinhala'
 
 interface JobRow {
   id: string
   name: string
   duration: string
   createdAt: string
+  createdAtIso: string
   status: JobStatus
-  language: JobLanguage
-  keyMoments: number
+  language: Exclude<LanguageFilter, 'All'>
+  keyMoments: string
 }
 
 const statusVariant: Record<JobStatus, 'default' | 'warning' | 'success' | 'danger'> = {
+  Queued: 'default',
   Uploading: 'warning',
   Processing: 'warning',
   Ready: 'success',
   Failed: 'danger'
 }
 
-const mockJobs: JobRow[] = [
-  {
-    id: 'job-1024',
-    name: 'Lydia & James',
-    duration: '42:18',
-    createdAt: '2026-02-20',
-    status: 'Processing',
-    language: 'English',
-    keyMoments: 12
-  },
-  {
-    id: 'job-1023',
-    name: 'Siena Garden Ceremony',
-    duration: '36:05',
-    createdAt: '2026-02-18',
-    status: 'Ready',
-    language: 'English',
-    keyMoments: 9
-  },
-  {
-    id: 'job-1022',
-    name: 'Ava + Noah Highlight',
-    duration: '18:40',
-    createdAt: '2026-02-17',
-    status: 'Uploading',
-    language: 'Sinhala',
-    keyMoments: 5
-  },
-  {
-    id: 'job-1021',
-    name: 'Riverview Reception',
-    duration: '51:12',
-    createdAt: '2026-02-15',
-    status: 'Failed',
-    language: 'English',
-    keyMoments: 0
-  },
-  {
-    id: 'job-1020',
-    name: 'Oceanview Toasts',
-    duration: '29:54',
-    createdAt: '2026-02-12',
-    status: 'Ready',
-    language: 'Sinhala',
-    keyMoments: 7
-  },
-  {
-    id: 'job-1019',
-    name: 'Forest Manor Vows',
-    duration: '44:03',
-    createdAt: '2026-02-10',
-    status: 'Processing',
-    language: 'English',
-    keyMoments: 11
-  },
-  {
-    id: 'job-1018',
-    name: 'Sunset Ballroom',
-    duration: '33:27',
-    createdAt: '2026-02-09',
-    status: 'Ready',
-    language: 'English',
-    keyMoments: 8
-  },
-  {
-    id: 'job-1017',
-    name: 'Hilltop Exchange',
-    duration: '24:18',
-    createdAt: '2026-02-05',
-    status: 'Processing',
-    language: 'Sinhala',
-    keyMoments: 6
-  },
-  {
-    id: 'job-1016',
-    name: 'Rosa Terrace',
-    duration: '38:41',
-    createdAt: '2026-02-03',
-    status: 'Ready',
-    language: 'English',
-    keyMoments: 10
-  }
-]
+const pageSize = 6
 
-const fetchJobs = async () => {
-  return mockJobs
+const statusParam: Record<StatusFilter, JobOut['status'] | undefined> = {
+  All: undefined,
+  Queued: 'queued',
+  Processing: 'processing',
+  Ready: 'ready',
+  Failed: 'failed'
+}
+
+const statusLabel: Record<JobOut['status'], JobStatus> = {
+  queued: 'Queued',
+  uploading: 'Uploading',
+  processing: 'Processing',
+  ready: 'Ready',
+  failed: 'Failed'
+}
+
+const formatDuration = (seconds: number | null) => {
+  if (seconds === null || !Number.isFinite(seconds)) return '--'
+  const mins = Math.floor(seconds / 60)
+  const secs = Math.floor(seconds % 60)
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+}
+
+const formatDate = (value: string) => {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '--'
+  return date.toLocaleDateString()
+}
+
+const mapJob = (job: JobOut): JobRow => {
+  return {
+    id: job.id,
+    name: job.name,
+    duration: formatDuration(job.duration_seconds),
+    createdAt: formatDate(job.created_at),
+    createdAtIso: job.created_at,
+    status: statusLabel[job.status],
+    language: job.language === 'si' || job.language === 'Sinhala' ? 'Sinhala' : 'English',
+    keyMoments: '--'
+  }
 }
 
 export const JobsList = () => {
   const navigate = useNavigate()
-  const { data: jobs = [] } = useQuery({
-    queryKey: ['jobs', 'list'],
-    queryFn: fetchJobs
-  })
-
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<JobStatus | 'All'>('All')
-  const [languageFilter, setLanguageFilter] = useState<JobLanguage | 'All'>('All')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('All')
+  const [languageFilter, setLanguageFilter] = useState<LanguageFilter>('All')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [page, setPage] = useState(1)
-  const [itemsToShow, setItemsToShow] = useState(6)
+
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ['jobs', 'list', page, statusFilter],
+    queryFn: () =>
+      listJobs({
+        page,
+        page_size: pageSize,
+        status: statusParam[statusFilter]
+      })
+  })
+
+  const jobs = useMemo(() => {
+    return (data?.items ?? []).map(mapJob)
+  }, [data?.items])
 
   const filtered = useMemo(() => {
     return jobs.filter((job) => {
       const matchesSearch = job.name.toLowerCase().includes(search.toLowerCase())
-      const matchesStatus = statusFilter === 'All' || job.status === statusFilter
       const matchesLanguage = languageFilter === 'All' || job.language === languageFilter
-      const createdTime = new Date(job.createdAt).getTime()
+      const createdTime = new Date(job.createdAtIso).getTime()
       const startTime = startDate ? new Date(startDate).getTime() : null
       const endTime = endDate ? new Date(endDate).getTime() : null
       const matchesStart = startTime ? createdTime >= startTime : true
       const matchesEnd = endTime ? createdTime <= endTime : true
-      return matchesSearch && matchesStatus && matchesLanguage && matchesStart && matchesEnd
+      return matchesSearch && matchesLanguage && matchesStart && matchesEnd
     })
-  }, [jobs, search, statusFilter, languageFilter, startDate, endDate])
+  }, [jobs, search, languageFilter, startDate, endDate])
 
-  const pageSize = 6
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
-  const pagedJobs = filtered.slice((page - 1) * pageSize, page * pageSize)
-  const mobileJobs = filtered.slice(0, itemsToShow)
+  const total = data?.total ?? 0
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const showingStart = filtered.length > 0 ? (page - 1) * pageSize + 1 : 0
+  const showingEnd = filtered.length > 0 ? (page - 1) * pageSize + filtered.length : 0
+
+  const paginationControls = (
+    <div className="flex items-center gap-2">
+      <Button
+        variant="ghost"
+        disabled={page <= 1 || isLoading}
+        onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+      >
+        Previous
+      </Button>
+      <span className="text-xs font-semibold text-text">
+        Page {page} of {totalPages}
+      </span>
+      <Button
+        variant="ghost"
+        disabled={page >= totalPages || isLoading}
+        onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+      >
+        Next
+      </Button>
+    </div>
+  )
+
+  if (isError) {
+    return (
+      <ErrorState
+        title="Jobs unavailable"
+        description="We could not load jobs from the API."
+        onAction={() => refetch()}
+      />
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -180,12 +182,12 @@ export const JobsList = () => {
               className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
               value={statusFilter}
               onChange={(event) => {
-                setStatusFilter(event.target.value as JobStatus | 'All')
+                setStatusFilter(event.target.value as StatusFilter)
                 setPage(1)
               }}
             >
               <option value="All">All statuses</option>
-              <option value="Uploading">Uploading</option>
+              <option value="Queued">Queued</option>
               <option value="Processing">Processing</option>
               <option value="Ready">Ready</option>
               <option value="Failed">Failed</option>
@@ -197,7 +199,7 @@ export const JobsList = () => {
               className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
               value={languageFilter}
               onChange={(event) => {
-                setLanguageFilter(event.target.value as JobLanguage | 'All')
+                setLanguageFilter(event.target.value as LanguageFilter)
                 setPage(1)
               }}
             >
@@ -236,73 +238,80 @@ export const JobsList = () => {
       </Card>
 
       <div className="hidden md:block">
-        <Table>
-          <thead className="bg-surface-alt text-left text-xs uppercase text-muted">
-            <tr>
-              <th className="px-4 py-3">Job</th>
-              <th className="px-4 py-3">Duration</th>
-              <th className="px-4 py-3">Created</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Key moments</th>
-              <th className="px-4 py-3 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {pagedJobs.map((job) => (
-              <tr key={job.id} className="border-t border-border">
-                <td className="px-4 py-3">
-                  <div>
-                    <p className="text-sm font-semibold text-text">{job.name}</p>
-                    <p className="text-xs text-muted">{job.language}</p>
-                  </div>
-                </td>
-                <td className="px-4 py-3">{job.duration}</td>
-                <td className="px-4 py-3">{job.createdAt}</td>
-                <td className="px-4 py-3">
-                  <Badge variant={statusVariant[job.status]}>{job.status}</Badge>
-                </td>
-                <td className="px-4 py-3">{job.keyMoments}</td>
-                <td className="px-4 py-3 text-right">
-                  <div className="flex justify-end gap-2">
-                    <Button variant="ghost" onClick={() => navigate(`${routePaths.app.jobs}/${job.id}`)}>
-                      View
-                    </Button>
-                    <Button variant="secondary">Export</Button>
-                  </div>
-                </td>
+        {isLoading ? (
+          <Card>
+            <p className="text-sm text-muted">Loading jobs...</p>
+          </Card>
+        ) : filtered.length === 0 ? (
+          <EmptyState
+            title="No jobs found"
+            description="Try changing your filters or create a new analysis job."
+            actionLabel="Create job"
+            onAction={() => navigate(routePaths.app.newAnalysis)}
+          />
+        ) : (
+          <Table>
+            <thead className="bg-surface-alt text-left text-xs uppercase text-muted">
+              <tr>
+                <th className="px-4 py-3">Job</th>
+                <th className="px-4 py-3">Duration</th>
+                <th className="px-4 py-3">Created</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Key moments</th>
+                <th className="px-4 py-3 text-right">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </Table>
+            </thead>
+            <tbody>
+              {filtered.map((job) => (
+                <tr key={job.id} className="border-t border-border">
+                  <td className="px-4 py-3">
+                    <div>
+                      <p className="text-sm font-semibold text-text">{job.name}</p>
+                      <p className="text-xs text-muted">{job.language}</p>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">{job.duration}</td>
+                  <td className="px-4 py-3">{job.createdAt}</td>
+                  <td className="px-4 py-3">
+                    <Badge variant={statusVariant[job.status]}>{job.status}</Badge>
+                  </td>
+                  <td className="px-4 py-3">{job.keyMoments}</td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button variant="ghost" onClick={() => navigate(`${routePaths.app.jobs}/${job.id}`)}>
+                        View
+                      </Button>
+                      <Button variant="secondary">Export</Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        )}
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
           <span>
-            Showing {(page - 1) * pageSize + 1}-
-            {Math.min(page * pageSize, filtered.length)} of {filtered.length}
+            Showing {showingStart}-{showingEnd} of {total}
           </span>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              disabled={page <= 1}
-              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-            >
-              Previous
-            </Button>
-            <span className="text-xs font-semibold text-text">
-              Page {page} of {totalPages}
-            </span>
-            <Button
-              variant="ghost"
-              disabled={page >= totalPages}
-              onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-            >
-              Next
-            </Button>
-          </div>
+          {paginationControls}
         </div>
       </div>
 
       <div className="grid gap-4 md:hidden">
-        {mobileJobs.map((job) => (
+        {isLoading && (
+          <Card>
+            <p className="text-sm text-muted">Loading jobs...</p>
+          </Card>
+        )}
+        {!isLoading && filtered.length === 0 && (
+          <EmptyState
+            title="No jobs found"
+            description="Try changing your filters or create a new analysis job."
+            actionLabel="Create job"
+            onAction={() => navigate(routePaths.app.newAnalysis)}
+          />
+        )}
+        {!isLoading && filtered.map((job) => (
           <Card key={job.id} className="space-y-3">
             <div className="flex items-center justify-between">
               <div>
@@ -333,13 +342,13 @@ export const JobsList = () => {
             </div>
           </Card>
         ))}
-        {itemsToShow < filtered.length && (
-          <Button
-            variant="secondary"
-            onClick={() => setItemsToShow((prev) => prev + pageSize)}
-          >
-            Load more
-          </Button>
+        {!isLoading && filtered.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
+            <span>
+              Showing {showingStart}-{showingEnd} of {total}
+            </span>
+            {paginationControls}
+          </div>
         )}
       </div>
     </div>

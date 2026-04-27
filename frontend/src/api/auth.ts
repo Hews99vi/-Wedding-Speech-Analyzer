@@ -1,20 +1,25 @@
 import api from './client'
-import { useAuthStore } from '../store/authStore'
+import type { TokenResponse } from '../types/auth'
 
-export const refreshAccessToken = async () => {
-  try {
-    // TODO: Replace with real refresh endpoint and response shape.
-    const response = await api.post('/auth/refresh')
-    const accessToken = (response.data as { accessToken?: string }).accessToken
-    const user = useAuthStore.getState().user
+export async function registerUser(data: {
+  name: string
+  email: string
+  password: string
+  role: 'videographer' | 'editor' | 'admin'
+}): Promise<TokenResponse> {
+  const response = await api.post<TokenResponse>('/auth/register', data)
+  return response.data
+}
 
-    if (accessToken && user) {
-      useAuthStore.getState().setAuth({ user, accessToken })
-      return true
-    }
+export async function loginUser(data: {
+  email: string
+  password: string
+}): Promise<TokenResponse> {
+  const response = await api.post<TokenResponse>('/auth/login', data)
+  return response.data
+}
 
-    return false
-  } catch {
-    return false
-  }
+export async function refreshToken(refresh_token: string): Promise<TokenResponse> {
+  const response = await api.post<TokenResponse>('/auth/refresh', { refresh_token })
+  return response.data
 }

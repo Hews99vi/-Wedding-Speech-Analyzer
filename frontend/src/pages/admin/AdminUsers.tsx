@@ -1,88 +1,124 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
+import { EmptyState } from '../../components/ui/EmptyState'
+import { ErrorState } from '../../components/ui/ErrorState'
+import {
+  deleteAdminUser,
+  fetchAdminUsers,
+  updateAdminUserRole,
+  updateAdminUserStatus,
+  type AdminUser
+} from '../../api/admin'
+import type { Role } from '../../types/auth'
 
-type UserStatus = 'active' | 'suspended'
+type UserRole = Role
 
-type UserRole = 'videographer' | 'editor' | 'admin'
+type ConfirmAction =
+  | { user: AdminUser; type: 'suspend' | 'activate' | 'delete' }
+  | { user: AdminUser; type: 'role'; nextRole: UserRole }
 
-type User = {
-  id: string
-  name: string
-  email: string
-  role: UserRole
-  status: UserStatus
-  lastActive: string
-  jobs: number
-  storage: string
+const formatDate = (value: string) => {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '--'
+  return date.toLocaleString()
 }
 
-const mockUsers: User[] = [
-  {
-    id: 'user-01',
-    name: 'Amina Rivera',
-    email: 'amina@weddingspeech.ai',
-    role: 'admin',
-    status: 'active',
-    lastActive: '2026-03-03 18:22',
-    jobs: 42,
-    storage: '84 GB'
-  },
-  {
-    id: 'user-02',
-    name: 'Theo Jacobs',
-    email: 'theo@weddingspeech.ai',
-    role: 'editor',
-    status: 'active',
-    lastActive: '2026-03-03 16:05',
-    jobs: 19,
-    storage: '26 GB'
-  },
-  {
-    id: 'user-03',
-    name: 'Maya Hill',
-    email: 'maya@weddingspeech.ai',
-    role: 'videographer',
-    status: 'suspended',
-    lastActive: '2026-02-28 10:11',
-    jobs: 11,
-    storage: '12 GB'
-  },
-  {
-    id: 'user-04',
-    name: 'Luis Carter',
-    email: 'luis@weddingspeech.ai',
-    role: 'videographer',
-    status: 'active',
-    lastActive: '2026-03-03 12:47',
-    jobs: 28,
-    storage: '51 GB'
-  }
-]
-
 export const AdminUsers = () => {
+  const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
-  const [selectedUser, setSelectedUser] = useState<User | null>(mockUsers[0])
-  const [confirmAction, setConfirmAction] = useState<null | {
-    user: User
-    type: 'suspend' | 'activate' | 'role'
-    nextRole?: UserRole
-  }>(null)
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null)
+
+  const {
+    data: users = [],
+    isLoading,
+    isError,
+    refetch
+  } = useQuery({
+    queryKey: ['admin', 'users'],
+    queryFn: fetchAdminUsers
+  })
+
+  useEffect(() => {
+    if (!selectedUserId && users.length > 0) {
+      setSelectedUserId(users[0].id)
+    }
+  }, [selectedUserId, users])
+
+  const selectedUser = useMemo(() => {
+    return users.find((user) => user.id === selectedUserId) ?? null
+  }, [selectedUserId, users])
 
   const filtered = useMemo(() => {
-    return mockUsers.filter((user) =>
+    return users.filter((user) =>
       `${user.name} ${user.email}`.toLowerCase().includes(search.toLowerCase())
     )
-  }, [search])
+  }, [search, users])
 
-  const handleRoleChange = (user: User, nextRole: UserRole) => {
+  const updateCachedUser = (updated: AdminUser) => {
+    queryClient.setQueryData<AdminUser[]>(['admin', 'users'], (current = []) =>
+      current.map((user) => (user.id === updated.id ? updated : user))
+    )
+    setSelectedUserId(updated.id)
+  }
+
+  const roleMutation = useMutation({
+    mutationFn: ({ userId, role }: { userId: string; role: UserRole }) =>
+      updateAdminUserRole(userId, role),
+    onSuccess: (updated) => {
+      updateCachedUser(updated)
+      toast.success(`Role updated to ${updated.role}`)
+      setConfirmAction(null)
+    },
+    onError: () => {
+      toast.error('Unable to update user role. Please try again.')
+    }
+  })
+
+  const statusMutation = useMutation({
+    mutationFn: ({ userId, status }: { userId: string; status: AdminUser['status'] }) =>
+      updateAdminUserStatus(userId, status),
+    onSuccess: (updated) => {
+      updateCachedUser(updated)
+      toast.success(updated.status === 'active' ? 'User activated' : 'User suspended')
+      setConfirmAction(null)
+    },
+    onError: () => {
+      toast.error('Unable to update user status. Please try again.')
+    }
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (userId: string) => deleteAdminUser(userId),
+    onSuccess: (_data, userId) => {
+      queryClient.setQueryData<AdminUser[]>(['admin', 'users'], (current = []) =>
+        current.filter((user) => user.id !== userId)
+      )
+      if (selectedUserId === userId) {
+        const nextUser = users.find((user) => user.id !== userId)
+        setSelectedUserId(nextUser?.id ?? null)
+      }
+      toast.success('User deleted')
+      setConfirmAction(null)
+    },
+    onError: () => {
+      toast.error('Unable to delete user. Please try again.')
+    }
+  })
+
+  const isMutating = roleMutation.isPending || statusMutation.isPending || deleteMutation.isPending
+
+  const handleRoleChange = (user: AdminUser, nextRole: UserRole) => {
+    if (user.role === nextRole) return
     setConfirmAction({ user, type: 'role', nextRole })
   }
 
-  const handleStatusToggle = (user: User) => {
+  const handleStatusToggle = (user: AdminUser) => {
     setConfirmAction({
       user,
       type: user.status === 'active' ? 'suspend' : 'activate'
@@ -91,14 +127,31 @@ export const AdminUsers = () => {
 
   const handleConfirm = () => {
     if (!confirmAction) return
+
     if (confirmAction.type === 'role') {
-      toast.success(`Role updated to ${confirmAction.nextRole}`)
-    } else if (confirmAction.type === 'suspend') {
-      toast.success('User suspended')
-    } else {
-      toast.success('User activated')
+      roleMutation.mutate({ userId: confirmAction.user.id, role: confirmAction.nextRole })
+      return
     }
-    setConfirmAction(null)
+
+    if (confirmAction.type === 'delete') {
+      deleteMutation.mutate(confirmAction.user.id)
+      return
+    }
+
+    statusMutation.mutate({
+      userId: confirmAction.user.id,
+      status: confirmAction.type === 'activate' ? 'active' : 'suspended'
+    })
+  }
+
+  if (isError) {
+    return (
+      <ErrorState
+        title="Users unavailable"
+        description="We could not load admin users from the API."
+        onAction={() => refetch()}
+      />
+    )
   }
 
   return (
@@ -106,9 +159,11 @@ export const AdminUsers = () => {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-semibold text-text">User Management</h1>
-          <p className="text-sm text-muted">Roles, access, and audit visibility.</p>
+          <p className="text-sm text-muted">Roles, access, and account status.</p>
         </div>
-        <Button variant="secondary">Invite user</Button>
+        <Button variant="secondary" disabled>
+          Invite user
+        </Button>
       </div>
 
       <Card className="space-y-3">
@@ -124,39 +179,52 @@ export const AdminUsers = () => {
         <Card className="space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-text">All users</p>
-            <span className="text-xs text-muted">{filtered.length} users</span>
+            <span className="text-xs text-muted">
+              {isLoading ? 'Loading...' : `${filtered.length} users`}
+            </span>
           </div>
-          <div className="space-y-3">
-            {filtered.map((user) => (
-              <button
-                key={user.id}
-                type="button"
-                onClick={() => setSelectedUser(user)}
-                className={`flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm transition ${
-                  selectedUser?.id === user.id
-                    ? 'border-brand-300 bg-brand-50'
-                    : 'border-border bg-surface-alt'
-                }`}
-              >
-                <div>
-                  <p className="font-semibold text-text">{user.name}</p>
-                  <p className="text-xs text-muted">{user.email}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant={user.status === 'active' ? 'success' : 'danger'}>
-                    {user.status}
-                  </Badge>
-                  <Badge variant="default">{user.role}</Badge>
-                </div>
-              </button>
-            ))}
-          </div>
+          {isLoading ? (
+            <div className="rounded-xl border border-border bg-surface-alt px-4 py-6 text-center text-sm text-muted">
+              Loading users...
+            </div>
+          ) : filtered.length === 0 ? (
+            <EmptyState
+              title="No users found"
+              description="Try a different name or email search."
+            />
+          ) : (
+            <div className="space-y-3">
+              {filtered.map((user) => (
+                <button
+                  key={user.id}
+                  type="button"
+                  onClick={() => setSelectedUserId(user.id)}
+                  className={`flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left text-sm transition ${
+                    selectedUser?.id === user.id
+                      ? 'border-brand-300 bg-brand-50'
+                      : 'border-border bg-surface-alt'
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-text">{user.name}</p>
+                    <p className="truncate text-xs text-muted">{user.email}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Badge variant={user.status === 'active' ? 'success' : 'danger'}>
+                      {user.status}
+                    </Badge>
+                    <Badge variant="default">{user.role}</Badge>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </Card>
 
         <Card className="space-y-4">
           <div>
             <p className="text-sm font-semibold text-text">Profile</p>
-            <p className="text-xs text-muted">View account usage and actions.</p>
+            <p className="text-xs text-muted">View account details and actions.</p>
           </div>
           {selectedUser ? (
             <div className="space-y-4">
@@ -171,17 +239,17 @@ export const AdminUsers = () => {
                 </div>
               </div>
               <div className="grid gap-3 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted">Jobs processed</span>
-                  <span className="font-semibold text-text">{selectedUser.jobs}</span>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-muted">User ID</span>
+                  <span className="truncate font-semibold text-text">{selectedUser.id}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-muted">Storage usage</span>
-                  <span className="font-semibold text-text">{selectedUser.storage}</span>
+                  <span className="text-muted">Created</span>
+                  <span className="font-semibold text-text">{formatDate(selectedUser.created_at)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-muted">Last active</span>
-                  <span className="font-semibold text-text">{selectedUser.lastActive}</span>
+                  <span className="text-muted">Status</span>
+                  <span className="font-semibold text-text">{selectedUser.status}</span>
                 </div>
               </div>
               <div className="space-y-2">
@@ -189,6 +257,7 @@ export const AdminUsers = () => {
                 <select
                   className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text"
                   value={selectedUser.role}
+                  disabled={isMutating}
                   onChange={(event) => handleRoleChange(selectedUser, event.target.value as UserRole)}
                 >
                   <option value="videographer">Videographer</option>
@@ -197,10 +266,20 @@ export const AdminUsers = () => {
                 </select>
               </div>
               <div className="grid gap-2">
-                <Button variant="secondary" onClick={() => handleStatusToggle(selectedUser)}>
+                <Button
+                  variant="secondary"
+                  disabled={isMutating}
+                  onClick={() => handleStatusToggle(selectedUser)}
+                >
                   {selectedUser.status === 'active' ? 'Suspend user' : 'Activate user'}
                 </Button>
-                <Button variant="ghost">View audit log</Button>
+                <Button
+                  variant="danger"
+                  disabled={isMutating}
+                  onClick={() => setConfirmAction({ user: selectedUser, type: 'delete' })}
+                >
+                  Delete user
+                </Button>
               </div>
             </div>
           ) : (
@@ -222,12 +301,20 @@ export const AdminUsers = () => {
                 `Suspend ${confirmAction.user.name}? They will lose access until reactivated.`}
               {confirmAction.type === 'activate' &&
                 `Activate ${confirmAction.user.name}? Access will be restored.`}
+              {confirmAction.type === 'delete' &&
+                `Delete ${confirmAction.user.name}? This removes their account and related jobs.`}
             </p>
             <div className="mt-4 flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setConfirmAction(null)}>
+              <Button variant="ghost" disabled={isMutating} onClick={() => setConfirmAction(null)}>
                 Cancel
               </Button>
-              <Button onClick={handleConfirm}>Confirm</Button>
+              <Button
+                variant={confirmAction.type === 'delete' ? 'danger' : 'primary'}
+                disabled={isMutating}
+                onClick={handleConfirm}
+              >
+                {isMutating ? 'Saving...' : 'Confirm'}
+              </Button>
             </div>
           </div>
         </div>

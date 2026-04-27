@@ -30,15 +30,17 @@ export const TopBar = () => {
 
   const markReadMutation = useMutation({
     mutationFn: (id: string) => markNotificationRead(id),
-    onSuccess: (data) => {
-      queryClient.setQueryData<NotificationItem[]>(['notifications'], data)
+    onSuccess: (updatedNotification) => {
+      queryClient.setQueryData<NotificationItem[]>(['notifications'], (current = []) =>
+        current.map((item) => (item.id === updatedNotification.id ? updatedNotification : item))
+      )
     }
   })
 
   const clearAllMutation = useMutation({
     mutationFn: clearAllNotifications,
-    onSuccess: (data) => {
-      queryClient.setQueryData<NotificationItem[]>(['notifications'], data)
+    onSuccess: () => {
+      queryClient.setQueryData<NotificationItem[]>(['notifications'], [])
     }
   })
 
@@ -82,7 +84,7 @@ export const TopBar = () => {
         <p className="text-sm text-muted">Welcome back {user?.name ?? 'Guest'}.</p>
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative" ref={notificationsRef}>
+        <div className="relative z-50" ref={notificationsRef}>
           <button
             className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-border text-muted transition hover:bg-surface-alt"
             type="button"
@@ -103,7 +105,7 @@ export const TopBar = () => {
             )}
           </button>
           {notificationsOpen && (
-            <div className="absolute right-0 mt-3 w-80 rounded-2xl border border-border bg-surface p-4 shadow-card">
+            <div className="absolute right-0 z-50 mt-3 max-h-[min(32rem,calc(100vh-9rem))] w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-border bg-surface p-4 shadow-card">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-text">Notifications</p>
                 <button
@@ -116,7 +118,7 @@ export const TopBar = () => {
                   Clear all
                 </button>
               </div>
-              <div className="mt-3 space-y-3">
+              <div className="mt-3 max-h-[22rem] space-y-3 overflow-y-auto pr-1">
                 {isLoading && (
                   <div className="space-y-2">
                     <Skeleton className="h-12 w-full" />
@@ -140,14 +142,16 @@ export const TopBar = () => {
                         navigate(routePaths.app.notifications)
                         setNotificationsOpen(false)
                       }}
-                      className={`flex w-full flex-col gap-1 rounded-xl border px-3 py-2 text-left text-xs transition ${
+                      className={`flex w-full min-w-0 flex-col gap-1 rounded-xl border px-3 py-2 text-left text-xs transition ${
                         item.read
                           ? 'border-border bg-surface-alt text-muted'
                           : 'border-brand-200 bg-brand-50 text-brand-700'
                       }`}
                     >
-                      <span className="font-semibold text-text">{item.title}</span>
-                      <span>{item.message}</span>
+                      <span className="break-words font-semibold text-text">{item.title}</span>
+                      <span className="overflow-hidden break-words leading-5 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3]">
+                        {item.message}
+                      </span>
                     </button>
                   ))}
               </div>

@@ -148,13 +148,25 @@ export const NewAnalysis = () => {
     onMutate: async (payload) => {
       setUploadState('uploading')
       setProgress(0)
+      const now = new Date().toISOString()
+      const eventDate = payload.eventDate || null
       const optimisticJob: Job = {
         id: `temp-${Date.now()}`,
+        user_id: 'pending',
         name: payload.name,
+        event_date: eventDate,
         eventDate: payload.eventDate,
         language: payload.language,
-        notes: payload.notes,
-        status: 'uploading'
+        notes: payload.notes ?? null,
+        status: 'uploading',
+        step_index: 0,
+        step_label: 'Uploading',
+        error_message: null,
+        duration_seconds: null,
+        created_at: now,
+        updated_at: now,
+        createdAt: now,
+        updatedAt: now
       }
       const previousJobs = queryClient.getQueryData<Job[]>(['jobs']) ?? []
       queryClient.setQueryData<Job[]>(['jobs'], [optimisticJob, ...previousJobs])

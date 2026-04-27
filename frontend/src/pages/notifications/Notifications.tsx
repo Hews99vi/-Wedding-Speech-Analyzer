@@ -10,16 +10,26 @@ import type { NotificationItem } from '../../types/notification'
 import { routePaths } from '../../routes/routePaths'
 
 const typeLabel: Record<NotificationItem['type'], string> = {
+  info: 'Info',
+  success: 'Processing complete',
+  warning: 'Warning',
+  error: 'Error',
   ProcessingComplete: 'Processing complete',
   KeyMomentsDetected: 'Key moments detected',
   AudioQualityIssue: 'Audio quality issue'
 }
 
 const typeVariant: Record<NotificationItem['type'], 'default' | 'success' | 'warning' | 'danger'> = {
+  info: 'default',
+  success: 'success',
+  warning: 'warning',
+  error: 'danger',
   ProcessingComplete: 'success',
   KeyMomentsDetected: 'warning',
   AudioQualityIssue: 'danger'
 }
+
+const getCreatedAt = (item: NotificationItem) => item.created_at ?? item.createdAt
 
 export const Notifications = () => {
   const queryClient = useQueryClient()
@@ -36,15 +46,17 @@ export const Notifications = () => {
 
   const markReadMutation = useMutation({
     mutationFn: (id: string) => markNotificationRead(id),
-    onSuccess: (data) => {
-      queryClient.setQueryData<NotificationItem[]>(['notifications'], data)
+    onSuccess: (updatedNotification) => {
+      queryClient.setQueryData<NotificationItem[]>(['notifications'], (current = []) =>
+        current.map((item) => (item.id === updatedNotification.id ? updatedNotification : item))
+      )
     }
   })
 
   const clearAllMutation = useMutation({
     mutationFn: clearAllNotifications,
-    onSuccess: (data) => {
-      queryClient.setQueryData<NotificationItem[]>(['notifications'], data)
+    onSuccess: () => {
+      queryClient.setQueryData<NotificationItem[]>(['notifications'], [])
     }
   })
 
@@ -95,15 +107,15 @@ export const Notifications = () => {
                   : 'border-brand-200 bg-brand-50'
               }`}
             >
-              <div className="space-y-1">
+              <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant={typeVariant[item.type]}>{typeLabel[item.type]}</Badge>
                   <span className="text-xs text-muted">
-                    {new Date(item.createdAt).toLocaleString()}
+                    {new Date(getCreatedAt(item)).toLocaleString()}
                   </span>
                 </div>
-                <p className="text-sm font-semibold text-text">{item.title}</p>
-                <p className="text-sm text-muted">{item.message}</p>
+                <p className="break-words text-sm font-semibold text-text">{item.title}</p>
+                <p className="break-words text-sm leading-6 text-muted">{item.message}</p>
               </div>
               <div className="flex items-center gap-2">
                 {!item.read && (
