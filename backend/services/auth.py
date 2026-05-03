@@ -33,7 +33,7 @@ def create_access_token(user_id: str, role: str) -> str:
         "type": "access",
         "exp": expires_at,
     }
-    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    return jwt.encode(payload, settings.supabase_jwt_secret, algorithm=settings.jwt_algorithm)
 
 
 def create_refresh_token(user_id: str) -> str:
@@ -46,13 +46,13 @@ def create_refresh_token(user_id: str) -> str:
         "type": "refresh",
         "exp": expires_at,
     }
-    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    return jwt.encode(payload, settings.supabase_jwt_secret, algorithm=settings.jwt_algorithm)
 
 
 def decode_token(token: str) -> dict:
     settings = get_settings()
     try:
-        return jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        return jwt.decode(token, settings.supabase_jwt_secret, algorithms=[settings.jwt_algorithm])
     except JWTError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
