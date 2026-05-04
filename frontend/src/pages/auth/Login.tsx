@@ -4,11 +4,10 @@ import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import axios from 'axios'
 import { Input } from '../../components/ui/Input'
 import { Button } from '../../components/ui/Button'
 import { useAuthStore } from '../../store/authStore'
-import { loginUser } from '../../api/auth'
+import { loginUser, fetchMe } from '../../api/auth'
 import { getRoleRedirect, routePaths } from '../../routes/routePaths'
 
 const schema = z.object({
@@ -18,7 +17,7 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>
 
-type AuthStatus = 'idle' | 'loading' | 'invalid' | 'locked'
+type AuthStatus = 'idle' | 'loading' | 'invalid' | 'locked' | 'unconfirmed'
 
 export const Login = () => {
   const navigate = useNavigate()
@@ -32,18 +31,14 @@ export const Login = () => {
     formState: { errors, isSubmitting }
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: {
-      email: ''
-    }
+    defaultValues: { email: '' }
   })
 
   useEffect(() => {
     const handleOnline = () => setIsOffline(false)
     const handleOffline = () => setIsOffline(true)
-
     window.addEventListener('online', handleOnline)
     window.addEventListener('offline', handleOffline)
-
     return () => {
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
@@ -58,35 +53,42 @@ export const Login = () => {
 
     setStatus('loading')
 
-    try {
-      const response = await loginUser({
-        email: values.email,
-        password: values.password
-      })
+    const { data, error } = await loginUser(values.email, values.password)
 
-      setAuth({
-        user: response.user,
-        accessToken: response.access_token,
-        refreshToken: response.refresh_token
-      })
-
-      setStatus('idle')
-      toast.success('Welcome back!')
-      navigate(getRoleRedirect(response.user.role))
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        if (error.response?.status === 401) {
-          setStatus('invalid')
-          return
-        }
-        if (error.response?.status === 403) {
-          setStatus('locked')
-          return
-        }
+    if (error) {
+      if (error.message.includes('Invalid login credentials')) {
+        setStatus('invalid')
+        return
       }
-
+      if (error.message.includes('Email not confirmed')) {
+        setStatus('unconfirmed')
+        return
+      }
+      if (error.message.includes('suspended') || error.message.includes('banned')) {
+        setStatus('locked')
+        return
+      }
       setStatus('idle')
       toast.error('Unable to sign in. Please try again.')
+      return
+    }
+
+    const session = data?.session
+    if (!session) {
+      setStatus('idle')
+      toast.error('Sign in failed unexpectedly.')
+      return
+    }
+
+    try {
+      const user = await fetchMe(session.access_token)
+      setAuth({ user, accessToken: session.access_token })
+      setStatus('idle')
+      toast.success('Welcome back!')
+      navigate(getRoleRedirect(user.role))
+    } catch {
+      setStatus('idle')
+      toast.error('Unable to load your profile. Please try again.')
     }
   }
 
@@ -111,6 +113,12 @@ export const Login = () => {
       {status === 'invalid' && (
         <div className="rounded-2xl border border-danger-500/40 bg-danger-50 px-4 py-3 text-xs text-danger-700">
           Invalid credentials. Please check your email and password.
+        </div>
+      )}
+
+      {status === 'unconfirmed' && (
+        <div className="rounded-2xl border border-warning-500/40 bg-warning-50 px-4 py-3 text-xs text-warning-700">
+          Please confirm your email before signing in. Check your inbox for the confirmation link.
         </div>
       )}
 

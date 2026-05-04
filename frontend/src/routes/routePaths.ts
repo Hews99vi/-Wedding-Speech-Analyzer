@@ -5,7 +5,8 @@ export const routePaths = {
   auth: {
     login: '/login',
     register: '/register',
-    forgotPassword: '/forgot-password'
+    forgotPassword: '/forgot-password',
+    resetPassword: '/auth/reset-password'
   },
   app: {
     root: '/app',

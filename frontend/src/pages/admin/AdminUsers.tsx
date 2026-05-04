@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Card } from '../../components/ui/Card'
@@ -44,14 +44,9 @@ export const AdminUsers = () => {
     queryFn: fetchAdminUsers
   })
 
-  useEffect(() => {
-    if (!selectedUserId && users.length > 0) {
-      setSelectedUserId(users[0].id)
-    }
-  }, [selectedUserId, users])
-
   const selectedUser = useMemo(() => {
-    return users.find((user) => user.id === selectedUserId) ?? null
+    if (selectedUserId) return users.find((user) => user.id === selectedUserId) ?? null
+    return users[0] ?? null
   }, [selectedUserId, users])
 
   const filtered = useMemo(() => {

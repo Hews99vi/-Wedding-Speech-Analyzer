@@ -149,6 +149,7 @@ export const TranscriptViewerPage = () => {
     setCurrentTime(time)
   }, [loopEnabled, loopRange])
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     setAudioUrl(null)
     setAudioDuration(0)
@@ -167,6 +168,7 @@ export const TranscriptViewerPage = () => {
       URL.revokeObjectURL(nextUrl)
     }
   }, [audioQuery.data])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     if (!isPlaying) {

@@ -7,6 +7,7 @@ import App from './App'
 import './index.css'
 import { ThemeProvider } from './components/ThemeProvider'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { AuthInitializer } from './components/AuthInitializer'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -23,8 +24,10 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
           <ThemeProvider>
-            <App />
-            <Toaster position="top-right" richColors />
+            <AuthInitializer>
+              <App />
+              <Toaster position="top-right" richColors />
+            </AuthInitializer>
           </ThemeProvider>
         </BrowserRouter>
       </QueryClientProvider>

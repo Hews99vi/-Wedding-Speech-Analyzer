@@ -80,33 +80,24 @@ export const NewAnalysis = () => {
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const [recorderState, setRecorderState] = useState<RecorderState>('idle')
-  const [micSupport, setMicSupport] = useState<MicSupport>('checking')
-  const [micMessage, setMicMessage] = useState<string | null>(null)
+  const [micSupport] = useState<MicSupport>(() => {
+    if (typeof window === 'undefined') return 'checking'
+    return typeof navigator !== 'undefined' && !!navigator.mediaDevices && typeof MediaRecorder !== 'undefined'
+      ? 'supported' : 'unsupported'
+  })
+  const [recordingMime] = useState<string | null>(getRecordingMimeType)
+  const [micMessage, setMicMessage] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    const supported = typeof navigator !== 'undefined' && !!navigator.mediaDevices && typeof MediaRecorder !== 'undefined'
+    if (!supported) return 'Microphone capture is not supported in this browser.'
+    return getRecordingMimeType() ? null : 'Recording is unavailable for mp3/wav/m4a in this browser.'
+  })
   const [recordingTime, setRecordingTime] = useState(0)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
-  const [recordingMime, setRecordingMime] = useState<string | null>(null)
   const timerRef = useRef<number | null>(null)
 
   const isUploading = uploadState === 'uploading'
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const supported =
-      typeof navigator !== 'undefined' &&
-      !!navigator.mediaDevices &&
-      typeof MediaRecorder !== 'undefined'
-    setMicSupport(supported ? 'supported' : 'unsupported')
-    if (!supported) {
-      setMicMessage('Microphone capture is not supported in this browser.')
-    } else {
-      const mime = getRecordingMimeType()
-      setRecordingMime(mime)
-      if (!mime) {
-        setMicMessage('Recording is unavailable for mp3/wav/m4a in this browser.')
-      }
-    }
-  }, [])
 
   useEffect(() => {
     if (recorderState === 'recording') {
@@ -371,7 +362,7 @@ export const NewAnalysis = () => {
             </label>
             {file && (
               <span className="text-xs text-muted">
-                {file.name} · {formatFileSize(file.size)}
+                {file.name} ï¿½ {formatFileSize(file.size)}
               </span>
             )}
           </div>

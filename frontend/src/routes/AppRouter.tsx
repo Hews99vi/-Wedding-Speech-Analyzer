@@ -4,6 +4,7 @@ import { DashboardLayout } from '../layouts/DashboardLayout'
 import { Login } from '../pages/auth/Login'
 import { Register } from '../pages/auth/Register'
 import { ForgotPassword } from '../pages/auth/ForgotPassword'
+import { ResetPassword } from '../pages/auth/ResetPassword'
 import { Videographer } from '../pages/dashboard/Videographer'
 import { Editor } from '../pages/dashboard/Editor'
 import { Admin } from '../pages/dashboard/Admin'
@@ -54,6 +55,12 @@ export const AppRouter = () => {
         }
       >
         <Route index element={<ForgotPassword />} />
+      </Route>
+      <Route
+        path={routePaths.auth.resetPassword}
+        element={<AuthLayout />}
+      >
+        <Route index element={<ResetPassword />} />
       </Route>
 
       <Route

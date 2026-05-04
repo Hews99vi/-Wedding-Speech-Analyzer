@@ -1,99 +1,67 @@
-from datetime import datetime, timedelta, timezone
-
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
-from passlib.context import CryptContext
 from postgrest.exceptions import APIError
 
-from config import get_settings
 from database import get_supabase
 
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 bearer_scheme = HTTPBearer()
-
-
-def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
-
-
-def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
-
-
-def create_access_token(user_id: str, role: str) -> str:
-    settings = get_settings()
-    expires_at = datetime.now(timezone.utc) + timedelta(
-        minutes=settings.access_token_expire_minutes
-    )
-    payload = {
-        "sub": user_id,
-        "role": role,
-        "type": "access",
-        "exp": expires_at,
-    }
-    return jwt.encode(payload, settings.supabase_jwt_secret, algorithm=settings.jwt_algorithm)
-
-
-def create_refresh_token(user_id: str) -> str:
-    settings = get_settings()
-    expires_at = datetime.now(timezone.utc) + timedelta(
-        days=settings.refresh_token_expire_days
-    )
-    payload = {
-        "sub": user_id,
-        "type": "refresh",
-        "exp": expires_at,
-    }
-    return jwt.encode(payload, settings.supabase_jwt_secret, algorithm=settings.jwt_algorithm)
-
-
-def decode_token(token: str) -> dict:
-    settings = get_settings()
-    try:
-        return jwt.decode(token, settings.supabase_jwt_secret, algorithms=[settings.jwt_algorithm])
-    except JWTError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-        ) from exc
 
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
 ) -> dict:
-    payload = decode_token(credentials.credentials)
-    if payload.get("type") != "access":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token type",
-        )
+    supabase = get_supabase()
 
-    user_id = payload.get("sub")
-    if not user_id:
+    # Delegate token verification to Supabase Auth — works regardless of
+    # whether the project signs with HS256 or ES256.
+    try:
+        response = supabase.auth.get_user(credentials.credentials)
+        auth_user = response.user
+        if not auth_user:
+            raise ValueError("No user returned")
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
-        )
+        ) from exc
 
-    supabase = get_supabase()
+    user_id = str(auth_user.id)
+    meta = auth_user.user_metadata or {}
+
     try:
         result = supabase.table("profiles").select("*").eq("id", user_id).single().execute()
         user = result.data if result else None
     except APIError as exc:
         if getattr(exc, "code", None) == "PGRST116":
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User not found",
-            ) from exc
-        raise
+            user = None
+        else:
+            raise
 
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-        )
+        email = auth_user.email or ""
+        name = meta.get("name") or email.split("@")[0]
+        role = meta.get("role", "videographer")
+        if role not in ("videographer", "editor", "admin"):
+            role = "videographer"
+        try:
+            insert_result = supabase.table("profiles").insert({
+                "id": user_id,
+                "email": email,
+                "name": name,
+                "role": role,
+                "status": "active",
+            }).execute()
+            user = insert_result.data[0] if insert_result.data else None
+        except Exception:
+            user = None
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User profile not found",
+            )
+
     if user.get("status") == "suspended":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

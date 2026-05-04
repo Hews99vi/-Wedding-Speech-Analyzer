@@ -5,9 +5,9 @@ import type { Role, User } from '../types/auth'
 interface AuthState {
   user: User | null
   accessToken: string | null
-  refreshToken: string | null
   isAuthenticated: boolean
-  setAuth: (payload: { user: User; accessToken: string; refreshToken: string }) => void
+  setAuth: (payload: { user: User; accessToken: string }) => void
+  setAccessToken: (token: string) => void
   clearAuth: () => void
   hasRole: (roles: Role[]) => boolean
 }
@@ -17,12 +17,12 @@ export const useAuthStore = create<AuthState>()(
     (set, get) => ({
       user: null,
       accessToken: null,
-      refreshToken: null,
       isAuthenticated: false,
-      setAuth: ({ user, accessToken, refreshToken }) =>
-        set({ user, accessToken, refreshToken, isAuthenticated: true }),
+      setAuth: ({ user, accessToken }) =>
+        set({ user, accessToken, isAuthenticated: true }),
+      setAccessToken: (token) => set({ accessToken: token }),
       clearAuth: () =>
-        set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false }),
+        set({ user: null, accessToken: null, isAuthenticated: false }),
       hasRole: (roles) => {
         const role = get().user?.role
         return role ? roles.includes(role) : false

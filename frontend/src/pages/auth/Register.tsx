@@ -3,57 +3,60 @@ import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import axios from 'axios'
 import { Input } from '../../components/ui/Input'
 import { Button } from '../../components/ui/Button'
-import { registerUser } from '../../api/auth'
-import { getRoleRedirect, routePaths } from '../../routes/routePaths'
+import { fetchMe, registerUser } from '../../api/auth'
 import { useAuthStore } from '../../store/authStore'
+import { getRoleRedirect, routePaths } from '../../routes/routePaths'
 
 const schema = z.object({
   name: z.string().min(2),
   email: z.string().email(),
   password: z.string().min(6),
-  role: z.enum(['videographer', 'editor', 'admin'])
+  role: z.enum(['videographer', 'editor'])
 })
 
 type FormValues = z.infer<typeof schema>
 
 export const Register = () => {
   const navigate = useNavigate()
-  const setAuth = useAuthStore((state) => state.setAuth)
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting }
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: {
-      role: 'videographer'
-    }
+    defaultValues: { role: 'videographer' }
   })
 
   const onSubmit = async (values: FormValues) => {
-    try {
-      const response = await registerUser(values)
+    const { data, error } = await registerUser(values.name, values.email, values.password, values.role)
 
-      setAuth({
-        user: response.user,
-        accessToken: response.access_token,
-        refreshToken: response.refresh_token
-      })
-
-      toast.success('Account created. Welcome!')
-      navigate(getRoleRedirect(response.user.role))
-    } catch (error) {
-      if (axios.isAxiosError(error) && error.response?.status === 400) {
-        const detail = error.response.data?.detail
-        toast.error(typeof detail === 'string' ? detail : 'Unable to create account.')
-        return
-      }
-
-      toast.error('Unable to create account. Please try again.')
+    if (error) {
+      const msg = error.message.toLowerCase().includes('already registered')
+        ? 'This email is already registered.'
+        : 'Unable to create account. Please try again.'
+      toast.error(msg)
+      return
     }
+
+    if (data.session) {
+      // Email confirmation is disabled — session is returned immediately.
+      try {
+        const user = await fetchMe(data.session.access_token)
+        useAuthStore.getState().setAuth({ user, accessToken: data.session.access_token })
+        toast.success('Account created! Welcome.')
+        navigate(getRoleRedirect(user.role))
+      } catch {
+        toast.error('Account created but unable to load your profile. Please sign in.')
+        navigate(routePaths.auth.login)
+      }
+      return
+    }
+
+    // Email confirmation is enabled — no session yet.
+    toast.success('Account created! Check your email to confirm before signing in.')
+    navigate(routePaths.auth.login)
   }
 
   return (
@@ -93,7 +96,6 @@ export const Register = () => {
           >
             <option value="videographer">Videographer</option>
             <option value="editor">Editor</option>
-            <option value="admin">Admin</option>
           </select>
         </label>
         <Button type="submit" disabled={isSubmitting} className="w-full bg-[#f6c67a] text-[#1b160f] hover:bg-[#f7b657]">

@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Input } from '../../components/ui/Input'
 import { Button } from '../../components/ui/Button'
+import { forgotPassword } from '../../api/auth'
 import { routePaths } from '../../routes/routePaths'
 
 const schema = z.object({
@@ -24,9 +25,14 @@ export const ForgotPassword = () => {
     resolver: zodResolver(schema)
   })
 
-  const onSubmit = () => {
+  const onSubmit = async (values: FormValues) => {
+    const { error } = await forgotPassword(values.email)
+    if (error) {
+      toast.error('Unable to send reset email. Please try again.')
+      return
+    }
     setSent(true)
-    toast.success('Reset link sent')
+    toast.success('Reset link sent — check your inbox.')
   }
 
   return (
@@ -40,6 +46,12 @@ export const ForgotPassword = () => {
           Enter your email and we will send a secure reset link.
         </p>
       </div>
+
+      {sent && (
+        <div className="rounded-2xl border border-success-500/40 bg-success-50 px-4 py-3 text-xs text-success-700">
+          A reset link has been sent. Check your inbox (and spam folder).
+        </div>
+      )}
 
       <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
         <Input

@@ -81,7 +81,7 @@ async def delete_user(
             detail="Cannot delete your own account",
         )
 
-    supabase.table("profiles").delete().eq("id", user_id).execute()
+    supabase.auth.admin.delete_user(user_id)
     return {"message": "User deleted"}
 
 

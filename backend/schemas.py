@@ -35,18 +35,6 @@ class HighlightLabel(str, Enum):
     ADVICE = "Advice"
 
 
-class RegisterRequest(BaseModel):
-    name: str
-    email: str
-    password: str
-    role: UserRole
-
-
-class LoginRequest(BaseModel):
-    email: str
-    password: str
-
-
 class UserOut(BaseModel):
     id: str
     name: str
@@ -54,17 +42,6 @@ class UserOut(BaseModel):
     role: UserRole
     status: UserStatus
     created_at: datetime
-
-
-class TokenResponse(BaseModel):
-    access_token: str
-    refresh_token: str
-    token_type: str
-    user: UserOut
-
-
-class RefreshRequest(BaseModel):
-    refresh_token: str
 
 
 class JobCreate(BaseModel):
